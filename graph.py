@@ -1,6 +1,7 @@
 from langgraph.graph import StateGraph, START, END
 from langgraph.prebuilt import ToolNode, tools_condition
 from langchain.messages import SystemMessage, HumanMessage, AIMessage
+from langgraph.checkpoint.memory import InMemorySaver
 from state import ResearchState
 from nodes.planner import planning_model
 from nodes.researcher import research_model
@@ -58,6 +59,7 @@ graph.add_conditional_edges(
 graph.add_edge("tools", "researcher")
 graph.add_edge("summarizer", END)
 
-graph = graph.compile()
+checkpoint = InMemorySaver()
+graph = graph.compile(checkpointer = checkpoint)
 
 
