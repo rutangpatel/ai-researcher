@@ -7,6 +7,8 @@ from nodes.planner import planning_model
 from nodes.researcher import research_model
 from tools.search import web_search
 from nodes.summarizer import summarizer_model
+from nodes.store_memory import save_memory
+from nodes.get_memory import read_memory
 
 def planner(state: ResearchState):
     response = planning_model.invoke([
@@ -15,7 +17,13 @@ def planner(state: ResearchState):
         "Do not ask the user for clarification or preferences." \
         "Each question should investigate a specific factual aspect " \
         "needed to answer the original question thoroughly."),
-        HumanMessage(state["question"])
+        HumanMessage(f"""
+            Current question:
+            {state["question"]}
+
+            Previous question:
+            {state["memory_context"]}   
+        """)
     ])
     return {"research_questions": response.question}
 
@@ -38,7 +46,7 @@ def researcher(state: ResearchState):
 def summarizer(state: ResearchState):
     response = summarizer_model.invoke([
         SystemMessage("You are summarizing agent." \
-        f"Your task is to summarizer the answers for the question {state["question"]} so it can" \
+        f"Your task is to summarize the answers for the question {state["question"]} so it can" \
         "withhold the meaning of the original question. The response should be well written" \
         "like blogs where the sub-headings are the sub-questions and the points." \
         "Don't start with here is your summary just start with main question and then the summmary."),
@@ -48,12 +56,15 @@ def summarizer(state: ResearchState):
 
 graph = StateGraph(ResearchState)
 
+graph.add_node("read_memory", read_memory)
 graph.add_node("planner", planner)
 graph.add_node("researcher", researcher)
 graph.add_node("tools", ToolNode([web_search]))
 graph.add_node("summarizer", summarizer)
+graph.add_node("save_memory", save_memory)
 
-graph.add_edge(START, "planner")
+graph.add_edge(START, "read_memory")
+graph.add_edge("read_memory", "planner")
 graph.add_edge("planner", "researcher")
 graph.add_conditional_edges(
     "researcher", 
@@ -65,9 +76,7 @@ graph.add_conditional_edges(
 )
 
 graph.add_edge("tools", "researcher")
-graph.add_edge("summarizer", END)
+graph.add_edge("summarizer", "save_memory")
+graph.add_edge("save_memory", END)
 
 checkpoint = InMemorySaver()
-graph = graph.compile(checkpointer = checkpoint)
-
-

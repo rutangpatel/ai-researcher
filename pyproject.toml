@@ -10,4 +10,5 @@ dependencies = [
     "langchain-openai>=1.6.2",
     "langchain-tavily>=0.2.18",
     "langgraph>=1.2.11",
+    "langgraph-store-mongodb>=0.4.0",
 ]
