@@ -21,7 +21,12 @@ def planner(state: ResearchState):
 
 def researcher(state: ResearchState):
     response = research_model.invoke([
-        SystemMessage("Research about the question provided using the web search tool provided to you"),
+        SystemMessage("You are web research agent." \
+        "You must use web_search agent to research about user's question." \
+        "Do not answer using your internal knowledge where the question requires" \
+        "you to respond with current, recent or factual information." \
+        "Use search result for additional searches or evidence and " \
+        "use the search again if the information is not sufficient."),
         HumanMessage("\n".join(state["research_questions"])),
         *state["messages"]
     ])
@@ -32,8 +37,11 @@ def researcher(state: ResearchState):
 
 def summarizer(state: ResearchState):
     response = summarizer_model.invoke([
-        SystemMessage("Summarize the content provided to you and make sure it is well defined and well articulated" \
-        f"so it doesn't forget the meaning of the original question which is {state["question"]}"),
+        SystemMessage("You are summarizing agent." \
+        f"Your task is to summarizer the answers for the question {state["question"]} so it can" \
+        "withhold the meaning of the original question. The response should be well written" \
+        "like blogs where the sub-headings are the sub-questions and the points." \
+        "Don't start with here is your summary just start with main question and then the summmary."),
         AIMessage(state["research_results"])
     ])
     return {"summary": response.content}
