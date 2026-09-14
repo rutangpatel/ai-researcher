@@ -6,32 +6,34 @@
 ![LangGraph](https://img.shields.io/badge/LangGraph-workflow-1C3C3C?style=flat-square)
 ![OpenAI](https://img.shields.io/badge/LLM-OpenAI-412991?style=flat-square&logo=openai&logoColor=white)
 
-**A terminal-based research assistant that plans questions, searches the web, and writes a focused answer.**
+**A terminal-based research assistant that remembers previous questions, researches the web, and writes a focused answer.**
 
 [Features](#features) · [Getting started](#getting-started) · [How it works](#how-it-works) · [Project structure](#project-structure)
 
 </div>
 
-AI Researcher is a small Python application built with [LangGraph](https://langchain-ai.github.io/langgraph/) and [LangChain](https://python.langchain.com/). Ask a question in the terminal and the application coordinates three stages: break the question into research tasks, investigate those tasks with Tavily web search, and summarize the findings with OpenAI.
+AI Researcher is a small Python application built with [LangGraph](https://langchain-ai.github.io/langgraph/) and [LangChain](https://python.langchain.com/). Ask a question in the terminal and the application reads the previous question from MongoDB, breaks the new question into research tasks, investigates those tasks with Tavily web search, summarizes the findings with OpenAI, and stores the current question for future runs.
 
 > [!NOTE]
-> This is a focused learning project and currently runs as an interactive command-line program. It does not expose a web server or persist research sessions.
+> This is a focused learning project and currently runs as an interactive command-line program. MongoDB is used for persistent memory, while LangGraph uses an in-memory checkpointer for the active thread.
 
 ## Features
 
 - **Question planning**: turns one user question into independent factual sub-questions.
+- **Persistent memory**: reads the previous question from MongoDB before planning and saves the current question after summarization.
 - **Web research**: gives the researcher access to Tavily Search with up to eight recent general web results per search.
 - **Tool-aware workflow**: loops between the researcher and search tool until the model has enough source material.
 - **Clear synthesis**: produces a final answer that keeps the original question in view.
-- **Workflow visualization**: writes the compiled LangGraph diagram to `architecture.png` when the graph module is loaded.
+- **Workflow visualization**: includes the current LangGraph architecture in `assets/architecture.png`.
 
 ## Getting started
 
 ### Prerequisites
 
-- Python 3.13 or newer
+- Python 3.13.7
 - An [OpenAI API key](https://platform.openai.com/api-keys)
 - A [Tavily API key](https://app.tavily.com/home)
+- A MongoDB deployment and connection string
 
 ### 1. Install dependencies
 
@@ -62,7 +64,16 @@ Copy `.env.example` to `.env` and replace the placeholder values:
 ```dotenv
 OPENAI_API_KEY = your-openai-api-key
 TAVILY_API_KEY = your-tavily-api-key
+MONGODB_URI = your-mongodb-connection-string
 ```
+
+`MONGODB_URI` is required because the application uses MongoDB to remember the last research question. Create a free database deployment in [MongoDB Atlas](https://www.mongodb.com/atlas), create a database user, allow your IP address in the network access settings, and copy the deployment connection string into `.env`:
+
+```dotenv
+MONGODB_URI = mongodb+srv://<username>:<password>@<cluster>.mongodb.net/?retryWrites=true&w=majority
+```
+
+Replace `<username>`, `<password>`, and `<cluster>` with your MongoDB credentials and deployment details. URL-encode special characters in the username or password when necessary. The application creates or uses the `ai-researcher` database and stores the last question in the `history` collection. Without a valid `MONGODB_URI`, `python main.py` cannot start the memory store.
 
 The `.env` file is ignored by Git. Do not commit API keys to the repository.
 
@@ -79,32 +90,38 @@ What is bugging you?
 How are small language models being used at the edge?
 ```
 
-The completed answer is printed under `Response:`. The first import also regenerates `architecture.png` from the current workflow.
+The completed answer is printed under `Response:`. The application uses the `research-1` thread ID and stores the last question in the `ai-researcher.history` MongoDB collection.
 
 ## How it works
 
-The workflow in `graph.py` is compiled as a directed LangGraph state machine:
+The workflow in `graph.py` is compiled as a directed LangGraph state machine and completed in `main.py` with a MongoDB store:
 
 <div align="center">
-  <img src="assets/architecture.png" alt="AI Researcher agent architecture" width="720px" />
+	<img src="./assets/architecture.png" alt="AI Researcher agent architecture" width="360px" />
 </div>
 
-The image above is generated from the compiled graph when the application starts. The same workflow is represented below in Mermaid for accessible, text-based rendering:
+The same workflow is represented below in Mermaid for accessible, text-based rendering:
 
 ```mermaid
 flowchart LR
-	A([Start]) --> B[Planner]
-	B --> C[Researcher]
-	C -->|needs web data| D[Tavily search]
-	D --> C
-	C -->|complete| E[Summarizer]
-	E --> F([End])
+	A([Start]) --> B[Read memory]
+	B --> C[Planner]
+	C --> D[Researcher]
+	D -->|needs web data| E[Tavily search]
+	E --> D
+	D -->|complete| F[Summarizer]
+	F --> G[Save memory]
+	G --> H([End])
 ```
 
-1. **Planner** uses structured output to create a list of research questions.
-2. **Researcher** receives those questions and can call the `web_search` tool.
-3. **Tool node** executes Tavily Search and returns its results to the researcher.
-4. **Summarizer** turns the collected research into the final response.
+1. **Read memory** loads the previous question from MongoDB into `memory_context`.
+2. **Planner** uses the current and previous questions to create a list of research questions.
+3. **Researcher** receives those questions and can call the `web_search` tool.
+4. **Tool node** executes Tavily Search and returns its results to the researcher.
+5. **Summarizer** turns the collected research into the final response.
+6. **Save memory** stores the current question in MongoDB for the next run.
+
+The active graph is checkpointed with `InMemorySaver`. Long-term question memory is provided by `MongoDBStore`, configured in `main.py` with database `ai-researcher` and collection `history`.
 
 The models are configured in the node modules:
 
@@ -117,12 +134,16 @@ Change those model names in `nodes/planner.py`, `nodes/researcher.py`, and `node
 
 ```text
 .
-├── main.py                  # CLI entry point
+├── main.py                  # CLI entry point and MongoDB store setup
 ├── graph.py                 # LangGraph definition and orchestration
 ├── state.py                 # Shared ResearchState schema
+├── assets/
+│   └── architecture.png     # Current agent architecture
 ├── nodes/
+│   ├── get_memory.py        # Read the previous question from MongoDB
 │   ├── planner.py            # Structured research-question generation
 │   ├── researcher.py         # Tool-enabled web research model
+│   ├── store_memory.py       # Save the current question to MongoDB
 │   └── summarizer.py         # Final answer generation
 ├── tools/
 │   └── search.py             # Tavily web-search tool
@@ -139,11 +160,11 @@ Confirm that `.env` exists at the project root and contains valid `OPENAI_API_KE
 
 ### Dependency or Python-version errors
 
-Use Python 3.13 or newer, activate the project virtual environment, and reinstall the dependencies. With `uv`, `uv sync` uses the versions recorded in `uv.lock`.
+Use Python 3.13.7, activate the project virtual environment, and reinstall the dependencies. With `uv`, `uv sync` uses the versions recorded in `uv.lock`.
 
 ### Inspecting the workflow
 
-Open `architecture.png` after running the application to see the currently compiled graph. If it is stale, delete it and run `python main.py` again.
+Open `assets/architecture.png` to see the current agent architecture. The image is a checked-in reference diagram; update it separately if the graph edges change.
 
 ## Resources
 
