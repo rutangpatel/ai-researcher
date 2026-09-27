@@ -16,8 +16,8 @@ def run_research(question: str):
         app = graph.compile(checkpointer = checkpoint, store = memory)
         config = {"configurable": {"thread_id": "research-1"}}
 
-        result = app.invoke({
-            "question": question
-        }, config = config)
-
-        return result["summary"]
+        for chunk in app.stream(
+            {"question": question},
+              config = config,
+              stream_mode = "updates"):
+            yield chunk
