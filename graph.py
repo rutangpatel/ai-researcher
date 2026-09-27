@@ -49,7 +49,7 @@ def summarizer(state: ResearchState):
         f"Your task is to summarize the answers for the question {state["question"]} so it can" \
         "withhold the meaning of the original question. The response should be well written" \
         "like blogs where the sub-headings are the sub-questions and the points." \
-        "Don't start with here is your summary just start with main question and then the summmary."),
+        "Don't start with here is your summary just start summmary with an introduction to the problem."),
         AIMessage(state["research_results"])
     ])
     return {"summary": response.content}

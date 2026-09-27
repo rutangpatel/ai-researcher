@@ -11,4 +11,6 @@ dependencies = [
     "langchain-tavily>=0.2.18",
     "langgraph>=1.2.11",
     "langgraph-store-mongodb>=0.4.0",
+    "prompt-toolkit>=3.0.53",
+    "textual>=8.2.8",
 ]
