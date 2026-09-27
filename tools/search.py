@@ -11,10 +11,10 @@ def web_search(query: str)-> str:
         response: str
     """
     search = TavilySearch(
-        max_results = 8,
+        max_results = 5,
         topic = "general",
         time_range = "week"
     )
 
     response = search.invoke({"query": query})
-    return response
+    return str(response)[:12000]

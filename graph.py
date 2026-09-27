@@ -1,6 +1,6 @@
 from langgraph.graph import StateGraph, START, END
 from langgraph.prebuilt import ToolNode, tools_condition
-from langchain.messages import SystemMessage, HumanMessage, AIMessage
+from langchain.messages import SystemMessage, HumanMessage
 from langgraph.checkpoint.memory import InMemorySaver
 from state import ResearchState
 from nodes.planner import planning_model
@@ -9,6 +9,8 @@ from tools.search import web_search
 from nodes.summarizer import summarizer_model
 from nodes.store_memory import save_memory
 from nodes.get_memory import read_memory
+
+MAX_RESEARCH_TEXT = 12000
 
 def planner(state: ResearchState):
     response = planning_model.invoke([
@@ -28,6 +30,7 @@ def planner(state: ResearchState):
     return {"research_questions": response.question}
 
 def researcher(state: ResearchState):
+    recent_messages = state["messages"][-2:]
     response = research_model.invoke([
         SystemMessage("You are web research agent." \
         "You must use web_search agent to research about user's question." \
@@ -36,11 +39,11 @@ def researcher(state: ResearchState):
         "Use search result for additional searches or evidence and " \
         "use the search again if the information is not sufficient."),
         HumanMessage("\n".join(state["research_questions"])),
-        *state["messages"]
+        *recent_messages
     ])
     return {
         "messages": [response],
-        "research_results": response.content
+        "research_results": response.content[:MAX_RESEARCH_TEXT]
     }
 
 def summarizer(state: ResearchState):
@@ -50,7 +53,7 @@ def summarizer(state: ResearchState):
         "withhold the meaning of the original question. The response should be well written" \
         "like blogs where the sub-headings are the sub-questions and the points." \
         "Don't start with here is your summary just start summmary with an introduction to the problem."),
-        AIMessage(state["research_results"])
+        HumanMessage(state["research_results"][:MAX_RESEARCH_TEXT])
     ])
     return {"summary": response.content}
 

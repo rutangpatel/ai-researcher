@@ -8,6 +8,8 @@ from prompt_toolkit.lexers import SimpleLexer
 from prompt_toolkit.styles import Style
 from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.patch_stdout import patch_stdout
+from rich.console import Console
+from rich.markdown import Markdown
 
 from main import run_research
 
@@ -92,9 +94,8 @@ def render_header() -> None:
 
 
 def render_result(result: str) -> None:
-    for line in result.split("\n"):
-        emit(f"  {line}")
-    emit_blank()
+    Console(width=term_width(), color_system=None, no_color=True).print(Markdown(result))
+    print()
 
 
 def make_research_key_bindings(research_done: asyncio.Event) -> KeyBindings:
