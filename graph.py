@@ -10,8 +10,6 @@ from nodes.summarizer import summarizer_model
 from nodes.store_memory import save_memory
 from nodes.get_memory import read_memory
 
-MAX_RESEARCH_TEXT = 12000
-
 def planner(state: ResearchState):
     response = planning_model.invoke([
         SystemMessage("Break the user's question into independent research questions" \
@@ -43,7 +41,7 @@ def researcher(state: ResearchState):
     ])
     return {
         "messages": [response],
-        "research_results": response.content[:MAX_RESEARCH_TEXT]
+        "research_results": response.content
     }
 
 def summarizer(state: ResearchState):
@@ -53,7 +51,7 @@ def summarizer(state: ResearchState):
         "withhold the meaning of the original question. The response should be well written" \
         "like blogs where the sub-headings are the sub-questions and the points." \
         "Don't start with here is your summary just start summmary with an introduction to the problem."),
-        HumanMessage(state["research_results"][:MAX_RESEARCH_TEXT])
+        HumanMessage(state["research_results"])
     ])
     return {"summary": response.content}
 

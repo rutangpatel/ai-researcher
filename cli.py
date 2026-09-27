@@ -11,6 +11,7 @@ from prompt_toolkit.lexers import SimpleLexer
 
 from rich.console import Console
 from rich.markdown import Markdown
+from main import run_research as graph_run_research
 
 
 load_dotenv()
@@ -104,28 +105,72 @@ def render_bottom_border() -> None:
     console.print(f"[{MAIN}]╰─[/][{SECONDARY}]{label}[/][{MAIN}]{'─' * dashes_after}╯[/]")
 
 
-STAGES = [
-    ("Checking memory...", 0.8),
-    ("Planning research...", 1.2),
-    ("Researching...", 1.5),
-    ("Searching the web...", 1.5),
-    ("Researching...", 1.0),
-    ("Summarizing...", 1.2),
-    ("Saving memory...", 0.8),
-]
-
-
 async def run_research(question: str) -> str:
-    with console.status("Starting...", spinner="dots", speed=1.2) as status:
-        for label, duration in STAGES:
-            status.update(f"[{DIM}]{label}[/]")
-            await asyncio.sleep(duration)
+    updates = asyncio.Queue()
+    loop = asyncio.get_running_loop()
 
-    return (
-        "This is a **CLI-only test response**. No API calls were made.\n\n"
-        "Pipeline: **Memory → Planner → Researcher → Web Search → "
-        "Summarizer → Memory**"
+    def stream_graph() -> None:
+        try:
+            for chunk in graph_run_research(question):
+                loop.call_soon_threadsafe(
+                    updates.put_nowait,
+                    ("update", chunk),
+                )
+        except Exception as exc:
+            loop.call_soon_threadsafe(
+                updates.put_nowait,
+                ("error", exc),
+            )
+        finally:
+            loop.call_soon_threadsafe(
+                updates.put_nowait,
+                ("done", None),
+            )
+
+    graph_task = asyncio.create_task(
+        asyncio.to_thread(stream_graph)
     )
+
+    stage_messages = {
+        "read_memory": "Checking memory...",
+        "planner": "Planning research...",
+        "researcher": "Researching...",
+        "tools": "Searching the web...",
+        "summarizer": "Summarizing...",
+        "save_memory": "Saving memory...",
+    }
+    summary = None
+
+    try:
+        with console.status(
+            f"[{DIM}]Checking memory...[/]",
+            spinner="dots",
+            speed=1.2,
+        ) as status:
+            while True:
+                event, payload = await updates.get()
+
+                if event == "error":
+                    raise payload
+
+                if event == "done":
+                    break
+
+                for node, values in payload.items():
+                    if node in stage_messages:
+                        status.update(
+                            f"[{DIM}]{stage_messages[node]}[/]"
+                        )
+
+                    if node == "summarizer":
+                        summary = values.get("summary")
+    finally:
+        await graph_task
+
+    if summary is None:
+        raise RuntimeError("The research graph returned no summary.")
+
+    return summary
 
 
 def is_exit_command(text: str) -> bool:
