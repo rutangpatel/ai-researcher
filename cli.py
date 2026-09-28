@@ -83,12 +83,19 @@ def clear_screen() -> None:
 
 
 def term_width() -> int:
-    return max(40, shutil.get_terminal_size((80, 24)).columns - 2)
+    width = console.width or shutil.get_terminal_size((80, 24)).columns
+    return max(20, width - 2)
 
 
 def render_header() -> None:
-    for line in BANNER_LINES:
-        console.print(f"[bold {MAIN}]  {line}[/]")
+    width = term_width()
+    banner_width = max(len(line) for line in BANNER_LINES)
+
+    if width < banner_width + 2:
+        console.print(f"[bold {MAIN}]{'SOCRATES':^{width}}[/]")
+    else:
+        for line in BANNER_LINES:
+            console.print(f"[bold {MAIN}]  {line}[/]")
     console.print()
 
 
@@ -100,6 +107,10 @@ def render_top_border() -> None:
 def render_bottom_border() -> None:
     width = term_width()
     model = get_active_model()
+    available_label_width = max(1, width - 3)
+    if len(model) > available_label_width:
+        model = f"{model[:max(1, available_label_width - 3)]}..."
+
     label = f" {model} "
     dashes_after = max(1, width - len(label) - 1)
     console.print(f"[{MAIN}]╰─[/][{SECONDARY}]{label}[/][{MAIN}]{'─' * dashes_after}╯[/]")

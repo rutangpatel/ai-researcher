@@ -4,11 +4,21 @@ from langchain.messages import SystemMessage, HumanMessage
 from langgraph.checkpoint.memory import InMemorySaver
 from state import ResearchState
 from nodes.planner import planning_model
+from models.jev import router
 from nodes.researcher import research_model
 from tools.search import web_search
 from nodes.summarizer import summarizer_model
 from nodes.store_memory import save_memory
 from nodes.get_memory import read_memory
+
+def classifi():
+    response = router.invoke(
+        {
+            "state": (
+                
+            )
+        }
+    )
 
 def planner(state: ResearchState):
     response = planning_model.invoke([
