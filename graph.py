@@ -1,25 +1,91 @@
+from IPython.display import Image
 from langgraph.graph import StateGraph, START, END
 from langgraph.prebuilt import ToolNode, tools_condition
 from langchain.messages import SystemMessage, HumanMessage
-from langgraph.checkpoint.memory import InMemorySaver
 from state import ResearchState
-from nodes.planner import planning_model
+from langchain_typesafe import Choice
 from models.jev import router
-from nodes.researcher import research_model
+from nodes.chat.basic_chat import chat
+from nodes.memory.memory_model import memory_model
+from nodes.research.planner import planning_model
+from nodes.research.researcher import research_model
 from tools.search import web_search
-from nodes.summarizer import summarizer_model
-from nodes.store_memory import save_memory
-from nodes.get_memory import read_memory
+from nodes.research.summarizer import summarizer_model
+from nodes.memory.store_memory import save_memory
+from nodes.memory.get_memory import read_memory
 
-def classifi():
+# Classifier determines who should answer the user query
+def classifier(state: ResearchState):
+
+    previous_question = "\n".join(
+        f"{item["question"]} (similarity: {item["score"]:.2f})"
+        for item in state["memory_context"]
+    )
+
     response = router.invoke(
         {
             "state": (
-                
-            )
+                f"Current user query:\n"
+                f"{state["question"]} \n\n"
+                f"Previous user interactions\n"
+                f"{previous_question}"
+            ),
+            "questions": {
+                "mode": Choice(
+                    instructions = "Choose who should answer the user query.",
+                    criteria = {
+                        "options": "Memory, Chat and Research"
+                    }
+                )
+            }
         }
     )
+    return response.choices["mode"].choice.lower()
 
+def route_query(state: ResearchState):
+    mode = state["mode"]
+
+    if mode == "memory":
+        return "memory"
+    elif mode == "chat":
+        return "chat"
+    elif mode == "research":
+        return "research"
+    raise ValueError(
+        f"Jev returned invalid mode: {mode}"
+    )
+
+def memory_response(state: ResearchState):
+    memories = state.get("memory_context", [])
+
+    if not memories:
+        raise ValueError(
+            "Memory route selected but no memory found."
+        )
+
+    best_memory = memories
+
+    response = memory_model.invoke({
+        SystemMessage("Answer the user question which should be clean and helpful" \
+        "and it should be done using previous memory question."),
+        HumanMessage(f"""Current question: {state["question"]} Previous question: {best_memory["answer"]}""")
+    })
+    
+    return {
+        "summary": response.content
+    }
+
+def chat_response(state: ResearchState):
+    response = chat.invoke({
+        SystemMessage("Answer the question without using any web-search" \
+        "Do not assume anything for which previous memory is required" \
+        "Provide clear and helpful answer."),
+        HumanMessage(f"Current question: {state["question"]}")
+    })
+    return {"summary": response.content}
+
+# Research agents which uses web search for answering user query
+# Planning agent
 def planner(state: ResearchState):
     response = planning_model.invoke([
         SystemMessage("Break the user's question into independent research questions" \
@@ -27,16 +93,11 @@ def planner(state: ResearchState):
         "Do not ask the user for clarification or preferences." \
         "Each question should investigate a specific factual aspect " \
         "needed to answer the original question thoroughly."),
-        HumanMessage(f"""
-            Current question:
-            {state["question"]}
-
-            Previous question:
-            {state["memory_context"]}   
-        """)
+        HumanMessage(f"Current question: {state["question"]}")
     ])
     return {"research_questions": response.question}
 
+# Research agent
 def researcher(state: ResearchState):
     recent_messages = state["messages"][-2:]
     response = research_model.invoke([
@@ -54,6 +115,7 @@ def researcher(state: ResearchState):
         "research_results": response.content
     }
 
+# Summarizing agent
 def summarizer(state: ResearchState):
     response = summarizer_model.invoke([
         SystemMessage("You are summarizing agent." \
@@ -68,6 +130,9 @@ def summarizer(state: ResearchState):
 graph = StateGraph(ResearchState)
 
 graph.add_node("read_memory", read_memory)
+graph.add_node("classifier", classifier)
+graph.add_node("memory", memory_response)
+graph.add_node("chat", chat_response)
 graph.add_node("planner", planner)
 graph.add_node("researcher", researcher)
 graph.add_node("tools", ToolNode([web_search]))
@@ -75,7 +140,18 @@ graph.add_node("summarizer", summarizer)
 graph.add_node("save_memory", save_memory)
 
 graph.add_edge(START, "read_memory")
-graph.add_edge("read_memory", "planner")
+graph.add_edge("read_memory", "classifier")
+graph.add_conditional_edges(
+    "classifier",
+    route_query,
+    {
+        "memory": "memory",
+        "chat": "chat",
+        "research": "planner"
+    }
+)
+graph.add_edge("memory", END)
+graph.add_edge("chat", "save_memory")
 graph.add_edge("planner", "researcher")
 graph.add_conditional_edges(
     "researcher", 
@@ -90,4 +166,5 @@ graph.add_edge("tools", "researcher")
 graph.add_edge("summarizer", "save_memory")
 graph.add_edge("save_memory", END)
 
-checkpoint = InMemorySaver()
+with open("graph.png", "wb") as file:
+    file.write(graph.compile().get_graph().draw_mermaid_png())

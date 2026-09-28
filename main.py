@@ -1,11 +1,12 @@
 import os
 from langgraph.store.mongodb import MongoDBStore
-from graph import graph, checkpoint
+from langgraph.checkpoint.memory import InMemorySaver
+from graph import graph
 from dotenv import load_dotenv
 load_dotenv()
 
 MONGODB_URI = os.environ["MONGODB_URI"]
-
+checkpoint = InMemorySaver()
 
 def run_research(question: str):
     with MongoDBStore.from_conn_string(

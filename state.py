@@ -9,4 +9,5 @@ class ResearchState(TypedDict):
     messages: Annotated[list[AnyMessage], add_messages]
     research_results: list[str]
     summary: str
+    mode: str
     memory_context: str

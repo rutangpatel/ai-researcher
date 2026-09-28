@@ -6,4 +6,5 @@ from models.provider import get_chat_model
 class PlannerQuestions(BaseModel):
     question: List[str] = Field(description = "Sub-Question related to question")
 
-planning_model = get_chat_model().with_structured_output(PlannerQuestions)
+planning_model, _ = get_chat_model()
+planning_model = planning_model.with_structured_output(PlannerQuestions)

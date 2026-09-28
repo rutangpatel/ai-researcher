@@ -26,6 +26,7 @@ def read_memory(state):
         },
         {
             "$project": {
+                "_id": 0,
                 "question": 1,
                 "answer": 1,
                 "score": {"$meta": "vectorSearchScore"}
@@ -33,5 +34,12 @@ def read_memory(state):
         }
     ]
 
-    results = collection.aggregate(pipeline)
-    return results
+    results = list(collection.aggregate(pipeline))
+
+    results = [
+        result
+        for result in results
+        if result["score"] >= 0.65
+    ]
+
+    return {"memory_context": results}
