@@ -34,7 +34,9 @@ def classifier(state: ResearchState):
                 "mode": Choice(
                     instructions = "Choose who should answer the user query.",
                     criteria = {
-                        "options": "Memory, Chat and Research"
+                        "memory": "Use when the previous interaction directly answers or helps answer the current query.",
+                        "chat": "Use for general conversation or questions that do not require web research.",
+                        "research": "Use when the query requires current, factual, or web-based information."
                     }
                 )
             }
@@ -45,12 +47,10 @@ def classifier(state: ResearchState):
 def route_query(state: ResearchState):
     mode = state["mode"]
 
-    if mode == "memory":
-        return "memory"
-    elif mode == "chat":
-        return "chat"
-    elif mode == "research":
-        return "research"
+    if mode == "memory" and not state.get("memory_context"):
+        mode = "chat"
+    if mode in ("memory", "chat", "research"):
+        return mode
     raise ValueError(
         f"Jev returned invalid mode: {mode}"
     )
@@ -63,12 +63,15 @@ def memory_response(state: ResearchState):
             "Memory route selected but no memory found."
         )
 
-    best_memory = memories[0]
+    memory_text = "\n\n".join(
+        f"Previous question: {m['question']}\nPrevious answer: {m['answer']}"
+        for m in memories
+    )
 
     response = memory_model.invoke([
         SystemMessage("Answer the user question which should be clean and helpful" \
         "and it should be done using previous memory answer."),
-        HumanMessage(f"""Current question: {state["question"]} Previous answer: {best_memory["answer"]}""")
+        HumanMessage(f"""Current question: {state["question"]} Previous answer: {memory_text}""")
     ])
     
     return {
@@ -103,10 +106,10 @@ def researcher(state: ResearchState):
         SystemMessage("You are web research agent." \
         "You must use web_search agent to research about user's question." \
         "Do not answer using your internal knowledge where the question requires" \
-        "you to respond with current, recent or factual information." \
-        "Use search results as evidence and search again when necessary."),
+        "you to respond with current, recent or factual information."),
         HumanMessage(f"""Original questions: {state["question"]}
         Research questions:{"\n".join(state["research_questions"])}"""),
+        *state.get("messages", [])
     ])
     return {
         "messages": [response],

@@ -11,11 +11,21 @@ checkpoint = InMemorySaver()
 def run_research(question: str):
     with MongoDBStore.from_conn_string(
         conn_string = MONGODB_URI,
-        db_name = "ai-researcher",
+        db_name = "socrates",
         collection_name = "history"
     ) as memory:
         app = graph.compile(checkpointer = checkpoint, store = memory)
         config = {"configurable": {"thread_id": "research-1"}}
+
+        initial_state = {
+            "question": question,
+            "research_questions": [],
+            "messages": [],
+            "research_results": [],
+            "summary": "",
+            "mode": "",
+            "memory_context": []
+        }
 
         for chunk in app.stream(
             {"question": question},

@@ -55,9 +55,9 @@ session = PromptSession(
 
 
 PROVIDER_MODEL_VAR = {
-    "openai": "OPENAI_MODEL",
-    "gemini": "GEMINI_MODEL",
-    "groq": "GROQ_MODEL",
+    "openai": ("OPENAI_MODEL", "OPENAI_SMALLER_MODEL"),
+    "gemini": ("GEMINI_MODEL", "GEMINI_SMALLER_MODEL"),
+    "groq": ("GROQ_MODEL", "GROQ_SMALLER_MODEL"),
 }
 
 
@@ -65,15 +65,22 @@ def get_active_model() -> str:
     provider = os.environ.get("MODEL_PROVIDER", "").strip().lower()
 
     if provider in PROVIDER_MODEL_VAR:
-        value = os.environ.get(PROVIDER_MODEL_VAR[provider])
-        if value:
-            return value
-        return f"{provider}: model not set"
+        model_var, smaller_var = PROVIDER_MODEL_VAR[provider]
+        model = os.environ.get(model_var)
+        smaller = os.environ.get(smaller_var)
+        if not model:
+            return f"{provider}: model not set"
+        if smaller and smaller != model:
+            return f"{model} | {smaller}"
+        return model
 
-    for var in PROVIDER_MODEL_VAR.values():
-        value = os.environ.get(var)
-        if value:
-            return value
+    for model_var, smaller_var in PROVIDER_MODEL_VAR.values():
+        model = os.environ.get(model_var)
+        if model:
+            smaller = os.environ.get(smaller_var)
+            if smaller and smaller != model:
+                return f"{model} | {smaller}"
+            return model
 
     return "no model configured"
 
@@ -144,6 +151,9 @@ async def run_research(question: str) -> str:
 
     stage_messages = {
         "read_memory": "Checking memory...",
+        "classifier": "Choosing how to answer...",
+        "memory": "Answering from memory...",
+        "chat": "Thinking...",
         "planner": "Planning research...",
         "researcher": "Researching...",
         "tools": "Searching the web...",
@@ -173,13 +183,14 @@ async def run_research(question: str) -> str:
                             f"[{DIM}]{stage_messages[node]}[/]"
                         )
 
-                    if node == "summarizer":
+                    # memory, chat and summarizer nodes all produce the final answer
+                    if node in {"memory", "chat", "summarizer"}:
                         summary = values.get("summary")
     finally:
         await graph_task
 
     if summary is None:
-        raise RuntimeError("The research graph returned no summary.")
+        raise RuntimeError("The graph returned no answer.")
 
     return summary
 
