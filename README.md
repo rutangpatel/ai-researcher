@@ -1,39 +1,38 @@
 <div align="center">
 
-# AI Researcher
+# Socrates
 
-![Python](https://img.shields.io/badge/Python-%3E%3D3.13-3776AB?style=flat-square&logo=python&logoColor=white)
+![Python](https://img.shields.io/badge/Python-%3E%3D3.13.7-3776AB?style=flat-square&logo=python&logoColor=white)
 ![LangGraph](https://img.shields.io/badge/LangGraph-workflow-1C3C3C?style=flat-square)
-![OpenAI](https://img.shields.io/badge/LLM-OpenAI-412991?style=flat-square&logo=openai&logoColor=white)
+![MongoDB](https://img.shields.io/badge/MongoDB-memory-47A248?style=flat-square&logo=mongodb&logoColor=white)
 
-**A terminal-based research assistant that remembers previous questions, researches the web, and writes a focused answer.**
+**A terminal research assistant that chooses between memory, conversation, and web research.**
 
 [Features](#features) · [Getting started](#getting-started) · [How it works](#how-it-works) · [Project structure](#project-structure)
 
 </div>
 
-AI Researcher is a small Python application built with [LangGraph](https://langchain-ai.github.io/langgraph/) and [LangChain](https://python.langchain.com/). Ask a question in the terminal and the application reads the previous question from MongoDB, breaks the new question into research tasks, investigates those tasks with Tavily web search, summarizes the findings with OpenAI, and stores the current question for future runs.
+Socrates is a Python command-line assistant built with [LangGraph](https://langchain-ai.github.io/langgraph/) and [LangChain](https://python.langchain.com/). It can answer casual questions, reuse relevant previous answers, or research current information on the web before producing a structured response.
 
 > [!NOTE]
-> This is a focused learning project and currently runs as an interactive command-line program. MongoDB is used for persistent memory, while LangGraph uses an in-memory checkpointer for the active thread.
+> Socrates is a local CLI application. It requires API access to a supported model provider, Tavily, Voyage AI, TypeSafe, and MongoDB. The application does not include a web UI or hosted deployment configuration.
 
 ## Features
 
-- **Question planning**: turns one user question into independent factual sub-questions.
-- **Persistent memory**: reads the previous question from MongoDB before planning and saves the current question after summarization.
-- **Web research**: gives the researcher access to Tavily Search with up to eight recent general web results per search.
-- **Tool-aware workflow**: loops between the researcher and search tool until the model has enough source material.
-- **Clear synthesis**: produces a final answer that keeps the original question in view.
-- **Workflow visualization**: includes the current LangGraph architecture in `assets/architecture.png`.
+- **Intent routing**: a TypeSafe classifier chooses the memory, chat, or research path.
+- **Semantic memory**: stores questions and answers in MongoDB with Voyage AI embeddings, then retrieves relevant history with MongoDB Atlas Vector Search.
+- **Web research**: decomposes research questions, searches Tavily for recent results, and loops through tool calls when more evidence is needed.
+- **Multiple model providers**: supports OpenAI, Google Gemini, and Groq through a common model factory.
+- **Terminal experience**: provides an interactive prompt, markdown-rendered answers, progress states, and `/help` and `/exit` commands.
 
 ## Getting started
 
 ### Prerequisites
 
-- Python 3.13.7
-- An [OpenAI API key](https://platform.openai.com/api-keys)
-- A [Tavily API key](https://app.tavily.com/home)
-- A MongoDB deployment and connection string
+- Python `3.13.7` or newer
+- A MongoDB deployment with Atlas Vector Search enabled
+- API keys for the selected model provider, Voyage AI, TypeSafe, and Tavily
+- [`uv`](https://docs.astral.sh/uv/) or `pip`
 
 ### 1. Install dependencies
 
@@ -57,118 +56,143 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
-### 2. Configure API keys
+### 2. Configure the environment
 
-Copy `.env.example` to `.env` and replace the placeholder values:
-
-```dotenv
-OPENAI_API_KEY = your-openai-api-key
-TAVILY_API_KEY = your-tavily-api-key
-MONGODB_URI = your-mongodb-connection-string
-```
-
-`MONGODB_URI` is required because the application uses MongoDB to remember the last research question. Create a free database deployment in [MongoDB Atlas](https://www.mongodb.com/atlas), create a database user, allow your IP address in the network access settings, and copy the deployment connection string into `.env`:
-
-```dotenv
-MONGODB_URI = mongodb+srv://<username>:<password>@<cluster>.mongodb.net/?retryWrites=true&w=majority
-```
-
-Replace `<username>`, `<password>`, and `<cluster>` with your MongoDB credentials and deployment details. URL-encode special characters in the username or password when necessary. The application creates or uses the `ai-researcher` database and stores the last question in the `history` collection. Without a valid `MONGODB_URI`, `python main.py` cannot start the memory store.
-
-The `.env` file is ignored by Git. Do not commit API keys to the repository.
-
-### 3. Run the researcher
+Copy `.env.example` to `.env` and fill in the values for one model provider:
 
 ```bash
-python main.py
+# Windows PowerShell
+Copy-Item .env.example .env
+
+# macOS/Linux
+# cp .env.example .env
 ```
 
-Enter a research question when prompted:
+At minimum, configure the following variables:
 
-```text
-What is bugging you?
-How are small language models being used at the edge?
+| Variable | Purpose |
+| --- | --- |
+| `MODEL_PROVIDER` | Provider to use: `openai`, `gemini`, or `groq` |
+| `*_API_KEY` | API key for the selected model provider |
+| `*_MODEL` | Larger model used for planning and research |
+| `*_SMALLER_MODEL` | Smaller model used for chat, memory answers, and summarization |
+| `TYPESAFE_API_KEY` | Classifier used to route each question |
+| `VOYAGE_API_KEY` | Embeddings used for semantic memory |
+| `TAVILY_API_KEY` | Web search used by the research route |
+| `MONGODB_URI` | MongoDB connection string |
+
+For example, an OpenAI configuration looks like this:
+
+```dotenv
+MODEL_PROVIDER=openai
+OPENAI_API_KEY=your-openai-api-key
+OPENAI_MODEL=your-openai-model-name
+OPENAI_SMALLER_MODEL=your-openai-smaller-model-name
+
+TYPESAFE_API_KEY=your-typesafe-api-key
+VOYAGE_API_KEY=your-voyage-api-key
+TAVILY_API_KEY=your-tavily-api-key
+MONGODB_URI=mongodb+srv://<username>:<password>@<cluster>.mongodb.net/?retryWrites=true&w=majority
 ```
 
-The completed answer is printed under `Response:`. The application uses the `research-1` thread ID and stores the last question in the `ai-researcher.history` MongoDB collection.
+Gemini and Groq use the equivalent `GEMINI_*` and `GROQ_*` variables shown in `.env.example`.
+
+> [!IMPORTANT]
+> The memory implementation uses the `socrates` database and `history` collection. Create an Atlas Vector Search index named `vector_index` on `value.embedding` before using semantic memory. Keep `.env` private; it is ignored by Git.
+
+### 3. Run Socrates
+
+```bash
+python cli.py
+```
+
+Ask a question at the `›` prompt. Use `/help` to list commands and `/exit` or `/quit` to leave the application.
+
+The graph runner is also available as `run_research` in `main.py` for use from another Python module:
+
+```python
+from main import run_research
+
+for update in run_research("What changed in Python recently?"):
+    print(update)
+```
 
 ## How it works
 
-The workflow in `graph.py` is compiled as a directed LangGraph state machine and completed in `main.py` with a MongoDB store:
+The workflow is compiled from `graph.py` and streams node updates while the CLI displays progress:
 
 <div align="center">
-	<img src="./assets/architecture.png" alt="AI Researcher agent architecture" width="360px" />
+  <img src="./assets/architecture.svg" alt="Socrates LangGraph architecture" width="640px" />
 </div>
-
-The same workflow is represented below in Mermaid for accessible, text-based rendering:
 
 ```mermaid
 flowchart LR
-	A([Start]) --> B[Read memory]
-	B --> C[Planner]
-	C --> D[Researcher]
-	D -->|needs web data| E[Tavily search]
-	E --> D
-	D -->|complete| F[Summarizer]
-	F --> G[Save memory]
-	G --> H([End])
+    A([Question]) --> B[Read memory]
+    B --> C[Classifier]
+    C -->|relevant history| D[Memory answer]
+    C -->|general conversation| E[Chat answer]
+    C -->|current or factual| F[Planner]
+    F --> G[Researcher]
+    G -->|tool call| H[Tavily search]
+    H --> G
+    G --> I[Summarizer]
+    D --> J[End]
+    E --> K[Save memory]
+    I --> K
+    K --> J
 ```
 
-1. **Read memory** loads the previous question from MongoDB into `memory_context`.
-2. **Planner** uses the current and previous questions to create a list of research questions.
-3. **Researcher** receives those questions and can call the `web_search` tool.
-4. **Tool node** executes Tavily Search and returns its results to the researcher.
-5. **Summarizer** turns the collected research into the final response.
-6. **Save memory** stores the current question in MongoDB for the next run.
+1. **Read memory** embeds the question with Voyage AI and retrieves sufficiently similar records from MongoDB Atlas Vector Search. Recall-oriented questions can fall back to recent history.
+2. **Classifier** uses TypeSafe to select `memory`, `chat`, or `research`.
+3. **Memory** and **chat** answer directly with the smaller configured model.
+4. **Planner** turns research requests into independent sub-questions using the larger configured model.
+5. **Researcher** can call the Tavily tool. Searches use the general topic, the last week as the time range, and up to five results.
+6. **Summarizer** turns the collected research into the final response.
+7. **Save memory** stores the question, answer, and Voyage embedding in MongoDB for later retrieval.
 
-The active graph is checkpointed with `InMemorySaver`. Long-term question memory is provided by `MongoDBStore`, configured in `main.py` with database `ai-researcher` and collection `history`.
-
-The models are configured in the node modules:
-
-- `gpt-5.1` for planning and research
-- `gpt-5` for summarization
-
-Change those model names in `nodes/planner.py`, `nodes/researcher.py`, and `nodes/summarizer.py` if your account uses different models.
+The active LangGraph thread uses an in-memory checkpointer with the fixed ID `research-1`. Long-term memory is persisted in MongoDB.
 
 ## Project structure
 
 ```text
 .
-├── main.py                  # CLI entry point and MongoDB store setup
-├── graph.py                 # LangGraph definition and orchestration
-├── state.py                 # Shared ResearchState schema
-├── assets/
-│   └── architecture.png     # Current agent architecture
+├── cli.py                         # Interactive terminal interface
+├── main.py                        # Graph runner and MongoDB store setup
+├── graph.py                       # LangGraph state machine and routing
+├── state.py                       # Shared ResearchState schema
+├── models/
+│   ├── jev.py                     # TypeSafe routing classifier
+│   └── provider.py                # OpenAI, Gemini, and Groq model factory
 ├── nodes/
-│   ├── get_memory.py        # Read the previous question from MongoDB
-│   ├── planner.py            # Structured research-question generation
-│   ├── researcher.py         # Tool-enabled web research model
-│   ├── store_memory.py       # Save the current question to MongoDB
-│   └── summarizer.py         # Final answer generation
-├── tools/
-│   └── search.py             # Tavily web-search tool
-├── .env.example              # Required environment-variable template
-├── pyproject.toml            # Project metadata and dependencies
-└── requirements.txt          # pip dependency list
+│   ├── chat/basic_chat.py         # General conversation response
+│   ├── memory/                    # Read, answer from, and save memory
+│   └── research/                  # Planning, web research, and summarization
+├── tools/search.py                # Tavily web-search tool
+├── assets/architecture.svg        # Workflow diagram
+├── .env.example                   # Environment-variable template
+├── pyproject.toml                 # Project metadata and uv dependencies
+└── requirements.txt               # pip dependency list
 ```
 
 ## Troubleshooting
 
-### API key errors
+### Missing environment variables
 
-Confirm that `.env` exists at the project root and contains valid `OPENAI_API_KEY` and `TAVILY_API_KEY` values. Restart the command after changing the file.
+Make sure `.env` is in the project root and that `MODEL_PROVIDER` exactly matches one of `openai`, `gemini`, or `groq`. The selected provider must have both its main and smaller model variables set.
 
-### Dependency or Python-version errors
+### MongoDB memory errors
 
-Use Python 3.13.7, activate the project virtual environment, and reinstall the dependencies. With `uv`, `uv sync` uses the versions recorded in `uv.lock`.
+Confirm that `MONGODB_URI` is valid, the deployment allows your IP address, and the `vector_index` Atlas Search index targets `value.embedding`. MongoDB credentials with special characters may need URL encoding.
 
-### Inspecting the workflow
+### Search errors
 
-Open `assets/architecture.png` to see the current agent architecture. The image is a checked-in reference diagram; update it separately if the graph edges change.
+Confirm that `TAVILY_API_KEY` is present. The Tavily tool is only used for questions routed to research.
 
 ## Resources
 
 - [LangGraph documentation](https://langchain-ai.github.io/langgraph/)
-- [LangChain Python documentation](https://python.langchain.com/docs/introduction/)
+- [LangChain documentation](https://python.langchain.com/docs/introduction/)
+- [MongoDB Atlas Vector Search](https://www.mongodb.com/docs/atlas/atlas-search/vector-search/)
 - [Tavily documentation](https://docs.tavily.com/)
-- [OpenAI API documentation](https://platform.openai.com/docs/)
+- [Voyage AI documentation](https://docs.voyageai.com/)
+- [TypeSafe on PyPI](https://pypi.org/project/langchain-typesafe/)
