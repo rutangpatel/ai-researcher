@@ -10,4 +10,4 @@ class ResearchState(TypedDict):
     research_results: list[str]
     summary: str
     mode: str
-    memory_context: str
+    memory_context: list[dict]  

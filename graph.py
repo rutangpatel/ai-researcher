@@ -1,4 +1,3 @@
-from IPython.display import Image
 from langgraph.graph import StateGraph, START, END
 from langgraph.prebuilt import ToolNode, tools_condition
 from langchain.messages import SystemMessage, HumanMessage
@@ -17,13 +16,14 @@ from nodes.memory.get_memory import read_memory
 # Classifier determines who should answer the user query
 def classifier(state: ResearchState):
 
+    memory_context = state.get("memory_context", [])
+
     previous_question = "\n".join(
         f"{item["question"]} (similarity: {item["score"]:.2f})"
-        for item in state["memory_context"]
+        for item in memory_context
     )
 
-    response = router.invoke(
-        {
+    response = router.invoke({
             "state": (
                 f"Current user query:\n"
                 f"{state["question"]} \n\n"
@@ -40,7 +40,7 @@ def classifier(state: ResearchState):
             }
         }
     )
-    return response.choices["mode"].choice.lower()
+    return {"mode": response.choices["mode"].choice.lower()}
 
 def route_query(state: ResearchState):
     mode = state["mode"]
@@ -63,25 +63,25 @@ def memory_response(state: ResearchState):
             "Memory route selected but no memory found."
         )
 
-    best_memory = memories
+    best_memory = memories[0]
 
-    response = memory_model.invoke({
+    response = memory_model.invoke([
         SystemMessage("Answer the user question which should be clean and helpful" \
-        "and it should be done using previous memory question."),
-        HumanMessage(f"""Current question: {state["question"]} Previous question: {best_memory["answer"]}""")
-    })
+        "and it should be done using previous memory answer."),
+        HumanMessage(f"""Current question: {state["question"]} Previous answer: {best_memory["answer"]}""")
+    ])
     
     return {
         "summary": response.content
     }
 
 def chat_response(state: ResearchState):
-    response = chat.invoke({
+    response = chat.invoke([
         SystemMessage("Answer the question without using any web-search" \
         "Do not assume anything for which previous memory is required" \
         "Provide clear and helpful answer."),
         HumanMessage(f"Current question: {state["question"]}")
-    })
+    ])
     return {"summary": response.content}
 
 # Research agents which uses web search for answering user query
@@ -99,16 +99,14 @@ def planner(state: ResearchState):
 
 # Research agent
 def researcher(state: ResearchState):
-    recent_messages = state["messages"][-2:]
     response = research_model.invoke([
         SystemMessage("You are web research agent." \
         "You must use web_search agent to research about user's question." \
         "Do not answer using your internal knowledge where the question requires" \
         "you to respond with current, recent or factual information." \
-        "Use search result for additional searches or evidence and " \
-        "use the search again if the information is not sufficient."),
-        HumanMessage("\n".join(state["research_questions"])),
-        *recent_messages
+        "Use search results as evidence and search again when necessary."),
+        HumanMessage(f"""Original questions: {state["question"]}
+        Research questions:{"\n".join(state["research_questions"])}"""),
     ])
     return {
         "messages": [response],
@@ -165,6 +163,3 @@ graph.add_conditional_edges(
 graph.add_edge("tools", "researcher")
 graph.add_edge("summarizer", "save_memory")
 graph.add_edge("save_memory", END)
-
-with open("graph.png", "wb") as file:
-    file.write(graph.compile().get_graph().draw_mermaid_png())
