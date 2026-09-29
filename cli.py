@@ -11,6 +11,11 @@ from prompt_toolkit.lexers import SimpleLexer
 
 from rich.console import Console
 from rich.markdown import Markdown
+import warnings
+from langchain_core._api import LangChainBetaWarning
+
+warnings.filterwarnings("ignore", category=LangChainBetaWarning)
+
 from main import run_research as graph_run_research
 
 

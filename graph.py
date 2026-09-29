@@ -70,7 +70,8 @@ def memory_response(state: ResearchState):
 
     response = memory_model.invoke([
         SystemMessage("Answer the user question which should be clean and helpful" \
-        "and it should be done using previous memory answer."),
+        "and it should be done using previous memory answer." \
+        "Format your response in markdown using '##' for section headings where appropriate, not bold text."),
         HumanMessage(f"""Current question: {state["question"]} Previous answer: {memory_text}""")
     ])
     
@@ -82,7 +83,8 @@ def chat_response(state: ResearchState):
     response = chat.invoke([
         SystemMessage("Answer the question without using any web-search" \
         "Do not assume anything for which previous memory is required" \
-        "Provide clear and helpful answer."),
+        "Provide clear and helpful answer." \
+        "Format your response in markdown using '##' for section headings where appropriate, not bold text."),
         HumanMessage(f"Current question: {state["question"]}")
     ])
     return {"summary": response.content}
@@ -123,7 +125,8 @@ def summarizer(state: ResearchState):
         f"Your task is to summarize the answers for the question {state["question"]} so it can" \
         "withhold the meaning of the original question. The response should be well written" \
         "like blogs where the sub-headings are the sub-questions and the points." \
-        "Don't start with here is your summary just start summmary with an introduction to the problem."),
+        "Don't start with here is your summary just start summmary with an introduction to the problem." \
+        "Format your response in markdown using '##' for section headings where appropriate, not bold text."),
         HumanMessage(state["research_results"])
     ])
     return {"summary": response.content}
